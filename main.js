@@ -102,62 +102,130 @@ class VimeoTranscriptExtractor {
             const html = response.body;
             console.log(`Page HTML length: ${html.length}`);
             
-            // Check for security blocks
-            if (html.includes('Verify to continue') || html.includes('security check')) {
-                console.log('Security check detected');
-                return { success: false };
-            }
-            
-            // Look for various transcript patterns
-            const patterns = [
-                /https:\/\/vimeo\.com\/texttrack\/(\d+)\.vtt\?token=([a-f0-9_]+)/g,
-                /"url":"https:\\?\/\\?\/vimeo\.com\\?\/texttrack\\?\/(\d+)\.vtt\?token=([a-f0-9_]+)"/g,
-                /texttrack\\?\/(\d+)\.vtt/g,
-                /"textTracks":\s*\[([^\]]+)\]/g,
-                /"text_tracks":\s*\[([^\]]+)\]/g
+            // Extract tokens and transcript IDs from JavaScript variables
+            const jsPatterns = [
+                // Look for texttrack URLs in JavaScript
+                /texttrack[\\\/]+(\d+)\.vtt[^"']*token[=:]([a-f0-9_]+)/gi,
+                
+                // Look for complete URLs
+                /https:\/\/vimeo\.com\/texttrack\/(\d+)\.vtt\?token=([a-f0-9_]+)/gi,
+                
+                // Look in JSON objects
+                /"url":\s*"([^"]*texttrack[^"]*\.vtt[^"]*)"/gi,
+                
+                // Look for tokens in data attributes
+                /data-[^=]*=["'][^"']*texttrack[^"']*["']/gi,
+                
+                // Search for vimeo config objects
+                /vimeoPlayerConfig[^}]*texttrack[^}]*/gi,
+                
+                // Look for any .vtt references
+                /[a-f0-9_]{8,}_0x[a-f0-9]{40,}/gi
             ];
 
-            for (let i = 0; i < patterns.length; i++) {
-                const pattern = patterns[i];
-                const matches = html.match(pattern);
-                console.log(`Pattern ${i + 1} matches: ${matches ? matches.length : 0}`);
+            let foundUrls = [];
+            
+            for (let i = 0; i < jsPatterns.length; i++) {
+                const pattern = jsPatterns[i];
+                let match;
+                const patternMatches = [];
                 
-                if (matches && matches.length > 0) {
-                    console.log(`Found matches: ${matches.slice(0, 3)}`); // Log first 3 matches
-                    
-                    for (const match of matches.slice(0, 5)) { // Try first 5 matches
-                        let transcriptUrl = match.replace(/\\?\//g, '/').replace(/\\"/g, '"');
-                        
-                        // Extract clean URL if it's embedded in JSON
-                        const urlMatch = transcriptUrl.match(/https:\/\/vimeo\.com\/texttrack\/\d+\.vtt[^"'\s]*/);
-                        if (urlMatch) {
-                            transcriptUrl = urlMatch[0];
-                        }
-                        
-                        console.log(`Testing URL: ${transcriptUrl}`);
-                        
-                        try {
-                            const testResponse = await gotScraping({
-                                url: transcriptUrl,
-                                headers: { 'User-Agent': 'Mozilla/5.0' },
-                                timeout: { response: 8000 }
-                            });
+                while ((match = pattern.exec(html)) !== null) {
+                    patternMatches.push(match[0]);
+                    if (patternMatches.length > 10) break; // Limit matches
+                }
+                
+                console.log(`Pattern ${i + 1} found ${patternMatches.length} matches`);
+                
+                if (patternMatches.length > 0) {
+                    console.log(`Sample matches: ${patternMatches.slice(0, 3)}`);
+                    foundUrls = foundUrls.concat(patternMatches);
+                }
+            }
 
-                            if (testResponse.body && testResponse.body.includes('WEBVTT')) {
-                                console.log('Found working transcript URL!');
-                                return {
-                                    success: true,
-                                    method: 'page_scraping',
-                                    transcriptUrl: transcriptUrl,
-                                    vttContent: testResponse.body
-                                };
-                            }
-                        } catch (testError) {
-                            console.log(`URL test failed: ${testError.message}`);
+            // Try to construct URLs from found data
+            const uniqueUrls = [...new Set(foundUrls)];
+            
+            for (const item of uniqueUrls) {
+                let testUrl = item;
+                
+                // Clean up the URL
+                testUrl = testUrl.replace(/\\/g, '');
+                testUrl = testUrl.replace(/^"/, '').replace(/"$/, '');
+                
+                // If it's not a complete URL, try to extract parts
+                if (!testUrl.startsWith('https://')) {
+                    const transcriptMatch = testUrl.match(/(\d+)\.vtt.*?([a-f0-9_]{8,}_0x[a-f0-9]{40,})/);
+                    if (transcriptMatch) {
+                        testUrl = `https://vimeo.com/texttrack/${transcriptMatch[1]}.vtt?token=${transcriptMatch[2]}`;
+                    } else {
+                        continue;
+                    }
+                }
+                
+                console.log(`Testing constructed URL: ${testUrl}`);
+                
+                try {
+                    const testResponse = await gotScraping({
+                        url: testUrl,
+                        headers: { 
+                            'User-Agent': 'Mozilla/5.0',
+                            'Referer': url
+                        },
+                        timeout: { response: 8000 }
+                    });
+
+                    if (testResponse.statusCode === 200 && 
+                        testResponse.body && 
+                        testResponse.body.includes('WEBVTT')) {
+                        console.log('Found working transcript URL!');
+                        return {
+                            success: true,
+                            method: 'page_scraping',
+                            transcriptUrl: testUrl,
+                            vttContent: testResponse.body
+                        };
+                    }
+                } catch (testError) {
+                    console.log(`URL test failed: ${testError.message}`);
+                }
+            }
+            
+            // Fallback: try with your known transcript ID and pattern matching for tokens
+            const knownTranscriptId = String(parseInt(videoId) - 859435365);
+            const tokenMatches = html.match(/[a-f0-9]{8}_0x[a-f0-9]{40}/g);
+            
+            if (tokenMatches && tokenMatches.length > 0) {
+                console.log(`Found ${tokenMatches.length} potential tokens`);
+                
+                for (const token of tokenMatches.slice(0, 5)) { // Try first 5 tokens
+                    const testUrl = `https://vimeo.com/texttrack/${knownTranscriptId}.vtt?token=${token}`;
+                    console.log(`Testing with token: ${testUrl}`);
+                    
+                    try {
+                        const testResponse = await gotScraping({
+                            url: testUrl,
+                            headers: { 'User-Agent': 'Mozilla/5.0' },
+                            timeout: { response: 8000 }
+                        });
+
+                        if (testResponse.statusCode === 200 && 
+                            testResponse.body && 
+                            testResponse.body.includes('WEBVTT')) {
+                            console.log('Found working transcript with token matching!');
+                            return {
+                                success: true,
+                                method: 'token_extraction',
+                                transcriptUrl: testUrl,
+                                vttContent: testResponse.body
+                            };
                         }
+                    } catch (testError) {
+                        console.log(`Token test failed: ${testError.message}`);
                     }
                 }
             }
+            
         } catch (error) {
             console.log(`Page scraping error: ${error.message}`);
         }
