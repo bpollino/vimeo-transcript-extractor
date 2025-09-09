@@ -8,7 +8,8 @@
             "type": "string",
             "description": "Single Vimeo video URL to extract transcript from",
             "example": "https://vimeo.com/1109387993",
-            "pattern": "^https://vimeo\\.com/\\d+"
+            "pattern": "^https://vimeo\\.com/\\d+",
+            "editor": "textfield"
         },
         "video_urls": {
             "title": "Multiple Vimeo Video URLs (Optional)",
@@ -18,14 +19,16 @@
                 "type": "string",
                 "pattern": "^https://vimeo\\.com/\\d+"
             },
-            "example": ["https://vimeo.com/1109387993", "https://vimeo.com/987654321"]
+            "example": ["https://vimeo.com/1109387993", "https://vimeo.com/987654321"],
+            "editor": "stringlist"
         },
         "language": {
             "title": "Language (Optional)",
             "type": "string",
             "description": "Preferred transcript language",
             "example": "en",
-            "default": ""
+            "default": "",
+            "editor": "textfield"
         }
     },
     "required": ["video_url"]
