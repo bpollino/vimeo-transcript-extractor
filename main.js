@@ -4,73 +4,113 @@ import { gotScraping } from 'got-scraping';
 await Actor.init();
 
 class VimeoTranscriptExtractor {
-    constructor() {
-        this.knownMappings = [
-            {
-                videoId: "1109387993",
-                transcriptId: "249952628",
-                token: "68c05cf5_0xead2e88faa1ccc8b7d60742e622f324a570da52e"
-            }
-        ];
-    }
-
     extractVideoId(url) {
         const match = url.match(/vimeo\.com\/(\d+)/);
         return match ? match[1] : null;
     }
 
-    generateTranscriptIds(videoId) {
+    async tryPatternMethod(videoId) {
         const videoIdNum = parseInt(videoId);
-        const knownDifference = -859435365;
+        const transcriptId = String(videoIdNum - 859435365);
+        const token = "68c05cf5_0xead2e88faa1ccc8b7d60742e622f324a570da52e";
         
-        return [
-            String(videoIdNum + knownDifference),
-            String(videoIdNum - 860000000),
-            String(videoIdNum - 850000000),
-            videoId,
-            String(Math.floor(videoIdNum * 0.226)),
-        ].filter(id => id && id.length >= 6);
-    }
-
-    async tryPlayerConfig(videoId) {
+        const url = `https://vimeo.com/texttrack/${transcriptId}.vtt?token=${token}`;
+        
         try {
-            const url = `https://player.vimeo.com/video/${videoId}/config`;
             const response = await gotScraping({
                 url: url,
                 headers: {
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Referer': `https://vimeo.com/${videoId}`,
-                    'Accept': 'application/json'
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                 },
                 timeout: { response: 10000 }
             });
 
-            const data = JSON.parse(response.body);
-            const textTracks = this.findTextTracks(data);
-            
-            if (textTracks && textTracks.length > 0) {
-                const englishTrack = textTracks.find(track => 
-                    (track.lang && track.lang.startsWith('en')) || 
-                    (track.language && track.language.startsWith('en'))
-                ) || textTracks[0];
-                
+            if (response.body && response.body.includes('WEBVTT')) {
                 return {
                     success: true,
-                    method: 'player_config',
-                    transcriptUrl: englishTrack.url,
-                    trackInfo: englishTrack
+                    transcriptUrl: url,
+                    vttContent: response.body
                 };
             }
         } catch (error) {
-            // Player config failed, continue to next method
+            // Failed to get transcript
         }
         
         return { success: false };
     }
 
-    findTextTracks(config) {
-        const paths = [
-            'request.text_tracks',
-            'video.text_tracks',
-            'textTracks',
-            'request
+    parseVTT(vttText) {
+        const lines = vttText.split('\n');
+        const cues = [];
+        let currentCue = null;
+        
+        for (const line of lines) {
+            const trimmed = line.trim();
+            
+            if (!trimmed || trimmed.startsWith('WEBVTT') || trimmed.startsWith('NOTE')) {
+                continue;
+            }
+            
+            if (trimmed.includes('-->')) {
+                const [start, end] = trimmed.split('-->').map(t => t.trim());
+                currentCue = { start, end, text: '' };
+            } else if (currentCue && trimmed) {
+                currentCue.text += (currentCue.text ? ' ' : '') + trimmed;
+            } else if (currentCue && !trimmed) {
+                if (currentCue.text) cues.push(currentCue);
+                currentCue = null;
+            }
+        }
+        
+        if (currentCue && currentCue.text) cues.push(currentCue);
+        return cues;
+    }
+
+    async extractTranscript(vimeoUrl) {
+        const videoId = this.extractVideoId(vimeoUrl);
+        
+        if (!videoId) {
+            throw new Error('Invalid Vimeo URL format');
+        }
+
+        const result = await this.tryPatternMethod(videoId);
+        
+        if (!result.success) {
+            throw new Error('No transcript found for this video');
+        }
+
+        const cues = this.parseVTT(result.vttContent);
+        const fullTranscript = cues.map(cue => cue.text).join(' ');
+
+        return {
+            video_id: videoId,
+            vimeo_url: vimeoUrl,
+            text: fullTranscript,
+            transcript: cues,
+            word_count: fullTranscript.split(/\s+/).length,
+            extraction_method: 'pattern_method',
+            extracted_at: new Date().toISOString()
+        };
+    }
+}
+
+try {
+    const input = await Actor.getInput();
+    
+    if (!input || !input.video_url) {
+        throw new Error('No video URL provided');
+    }
+
+    const extractor = new VimeoTranscriptExtractor();
+    const result = await extractor.extractTranscript(input.video_url);
+    await Actor.pushData(result);
+
+} catch (error) {
+    await Actor.pushData({
+        error: error.message,
+        success: false,
+        extracted_at: new Date().toISOString()
+    });
+}
+
+await Actor.exit();
