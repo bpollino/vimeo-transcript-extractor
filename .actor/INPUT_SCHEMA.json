@@ -11,9 +11,9 @@
             "pattern": "^https://vimeo\\.com/\\d+"
         },
         "video_urls": {
-            "title": "Multiple Vimeo Video URLs",
+            "title": "Multiple Vimeo Video URLs (Optional)",
             "type": "array",
-            "description": "Array of Vimeo video URLs to extract transcripts from",
+            "description": "Array of Vimeo video URLs to extract transcripts from (leave empty if using single URL)",
             "items": {
                 "type": "string",
                 "pattern": "^https://vimeo\\.com/\\d+"
@@ -21,15 +21,12 @@
             "example": ["https://vimeo.com/1109387993", "https://vimeo.com/987654321"]
         },
         "language": {
-            "title": "Language",
+            "title": "Language (Optional)",
             "type": "string",
-            "description": "Preferred transcript language (optional)",
+            "description": "Preferred transcript language",
             "example": "en",
             "default": ""
         }
     },
-    "anyOf": [
-        { "required": ["video_url"] },
-        { "required": ["video_urls"] }
-    ]
+    "required": ["video_url"]
 }
