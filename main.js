@@ -62,7 +62,7 @@ class VimeoTranscriptExtractor {
                 };
             }
         } catch (error) {
-            await Actor.log.warning(`Player config failed: ${error.message}`);
+            console.log(`Player config failed: ${error.message}`);
         }
         
         return { success: false };
@@ -173,8 +173,7 @@ class VimeoTranscriptExtractor {
             throw new Error(`Invalid Vimeo URL format: ${vimeoUrl}`);
         }
 
-        await Actor.log.info(`Extracting transcript for video ID: ${videoId}`);
-
+        console.log(`Extracting transcript for video ID: ${videoId}`);
         const methods = [
             () => this.tryPlayerConfig(videoId),
             () => this.tryPatternMethod(videoId)
@@ -198,7 +197,7 @@ class VimeoTranscriptExtractor {
             throw new Error(`No transcript found for video ${videoId}. Video may not have captions available.`);
         }
 
-        await Actor.log.info(`Found transcript using method: ${method}`);
+       console.log(`Found transcript using method: ${method}`);
 
         const response = await gotScraping({
             url: transcriptUrl,
@@ -266,12 +265,12 @@ try {
             };
             
             await Actor.pushData(errorResult);
-            await Actor.log.error(`Failed to process ${url}: ${error.message}`);
+            console.error(`Failed to process ${url}: ${error.message}`);
         }
     }
 
 } catch (error) {
-    await Actor.log.error(`Actor failed: ${error.message}`);
+    console.error(`Actor failed: ${error.message}`);
     await Actor.fail(error.message);
 }
 
