@@ -232,18 +232,21 @@ try {
     const input = await Actor.getInput();
     
     if (!input || !input.video_url) {
-        throw new Error('No video URL provided');
+        await Actor.pushData({
+            error: 'No video URL provided',
+            success: false,
+            extracted_at: new Date().toISOString()
+        });
+    } else {
+        const extractor = new VimeoTranscriptExtractor();
+        const result = await extractor.extractTranscript(input.video_url);
+        await Actor.pushData(result);
     }
-
-    const extractor = new VimeoTranscriptExtractor();
-    const result = await extractor.extractTranscript(input.video_url);
-    await Actor.pushData(result);
 
 } catch (error) {
     await Actor.pushData({
         error: error.message,
         success: false,
-        video_url: input ? input.video_url : 'unknown',
         extracted_at: new Date().toISOString()
     });
 }
