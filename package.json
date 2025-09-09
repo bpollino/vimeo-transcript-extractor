@@ -9,7 +9,7 @@
     },
     "dependencies": {
         "apify": "^3.1.0",
-        "got-scraping": "^4.0.0"
+        "crawlee": "^3.14.1"
     },
     "keywords": ["vimeo", "transcript", "captions", "subtitles", "video"],
     "author": "Your Name",
