@@ -28,7 +28,14 @@ class VimeoTranscriptExtractor {
             console.log(`Response status: ${response.statusCode}`);
             console.log(`Response length: ${response.body.length}`);
             
-            const data = JSON.parse(response.body);
+            let data;
+            try {
+                data = JSON.parse(response.body);
+            } catch (parseError) {
+                console.log(`JSON parse error: ${parseError.message}`);
+                return { success: false };
+            }
+            
             console.log(`Config keys: ${Object.keys(data)}`);
             
             // Debug: Log the full structure
@@ -62,12 +69,31 @@ class VimeoTranscriptExtractor {
                 if (Array.isArray(tracks) && tracks.length > 0) {
                     console.log(`Found tracks at ${path}: ${JSON.stringify(tracks)}`);
                     const track = tracks.find(t => t.lang === 'en') || tracks[0];
-                    return {
-                        success: true,
-                        method: 'player_config',
-                        transcriptUrl: track.url,
-                        trackInfo: track
-                    };
+                    
+                    // Fetch the actual VTT content
+                    try {
+                        console.log(`Fetching VTT content from: ${track.url}`);
+                        const vttResponse = await gotScraping({
+                            url: track.url,
+                            headers: {
+                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                                'Referer': `https://vimeo.com/${videoId}`
+                            },
+                            timeout: { response: 10000 }
+                        });
+                        
+                        if (vttResponse.statusCode === 200 && vttResponse.body) {
+                            return {
+                                success: true,
+                                method: 'player_config',
+                                transcriptUrl: track.url,
+                                vttContent: vttResponse.body,
+                                trackInfo: track
+                            };
+                        }
+                    } catch (vttError) {
+                        console.log(`Failed to fetch VTT content: ${vttError.message}`);
+                    }
                 }
             }
         } catch (error) {
@@ -89,6 +115,9 @@ class VimeoTranscriptExtractor {
             const url = `https://vimeo.com/${videoId}`;
             console.log(`Fetching page: ${url}`);
             
+            // Add delay for rate limiting
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
             const response = await gotScraping({
                 url: url,
                 headers: {
@@ -103,43 +132,37 @@ class VimeoTranscriptExtractor {
             console.log(`Page HTML length: ${html.length}`);
             
             // Extract tokens and transcript IDs from JavaScript variables
+            // Using non-global flags to avoid state retention issues
             const jsPatterns = [
                 // Look for texttrack URLs in JavaScript
-                /texttrack[\\\/]+(\d+)\.vtt[^"']*token[=:]([a-f0-9_]+)/gi,
+                /texttrack[\\\/]+(\d+)\.vtt[^"']*token[=:]([a-f0-9_]+)/i,
                 
                 // Look for complete URLs
-                /https:\/\/vimeo\.com\/texttrack\/(\d+)\.vtt\?token=([a-f0-9_]+)/gi,
+                /https:\/\/vimeo\.com\/texttrack\/(\d+)\.vtt\?token=([a-f0-9_]+)/i,
                 
                 // Look in JSON objects
-                /"url":\s*"([^"]*texttrack[^"]*\.vtt[^"]*)"/gi,
+                /"url":\s*"([^"]*texttrack[^"]*\.vtt[^"]*)"/i,
                 
                 // Look for tokens in data attributes
-                /data-[^=]*=["'][^"']*texttrack[^"']*["']/gi,
+                /data-[^=]*=["'][^"']*texttrack[^"']*["']/i,
                 
                 // Search for vimeo config objects
-                /vimeoPlayerConfig[^}]*texttrack[^}]*/gi,
+                /vimeoPlayerConfig[^}]*texttrack[^}]*/i,
                 
                 // Look for any .vtt references
-                /[a-f0-9_]{8,}_0x[a-f0-9]{40,}/gi
+                /[a-f0-9_]{8,}_0x[a-f0-9]{40,}/i
             ];
 
             let foundUrls = [];
             
             for (let i = 0; i < jsPatterns.length; i++) {
                 const pattern = jsPatterns[i];
-                let match;
-                const patternMatches = [];
+                const matches = html.match(new RegExp(pattern.source, 'gi'));
                 
-                while ((match = pattern.exec(html)) !== null) {
-                    patternMatches.push(match[0]);
-                    if (patternMatches.length > 10) break; // Limit matches
-                }
-                
-                console.log(`Pattern ${i + 1} found ${patternMatches.length} matches`);
-                
-                if (patternMatches.length > 0) {
-                    console.log(`Sample matches: ${patternMatches.slice(0, 3)}`);
-                    foundUrls = foundUrls.concat(patternMatches);
+                if (matches && matches.length > 0) {
+                    console.log(`Pattern ${i + 1} found ${matches.length} matches`);
+                    console.log(`Sample matches: ${matches.slice(0, 3)}`);
+                    foundUrls = foundUrls.concat(matches.slice(0, 10)); // Limit to 10 matches per pattern
                 }
             }
 
@@ -166,6 +189,9 @@ class VimeoTranscriptExtractor {
                 console.log(`Testing constructed URL: ${testUrl}`);
                 
                 try {
+                    // Add delay for rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    
                     const testResponse = await gotScraping({
                         url: testUrl,
                         headers: { 
@@ -203,6 +229,9 @@ class VimeoTranscriptExtractor {
                     console.log(`Testing with token: ${testUrl}`);
                     
                     try {
+                        // Add delay for rate limiting
+                        await new Promise(resolve => setTimeout(resolve, 500));
+                        
                         const testResponse = await gotScraping({
                             url: testUrl,
                             headers: { 'User-Agent': 'Mozilla/5.0' },
@@ -234,6 +263,10 @@ class VimeoTranscriptExtractor {
     }
 
     parseVTT(vttText) {
+        if (!vttText || typeof vttText !== 'string') {
+            return [];
+        }
+        
         const lines = vttText.split('\n');
         const cues = [];
         let currentCue = null;
@@ -246,6 +279,10 @@ class VimeoTranscriptExtractor {
             }
             
             if (trimmed.includes('-->')) {
+                // Save previous cue if exists
+                if (currentCue && currentCue.text) {
+                    cues.push(currentCue);
+                }
                 const [start, end] = trimmed.split('-->').map(t => t.trim());
                 currentCue = { start, end, text: '' };
             } else if (currentCue && trimmed) {
@@ -256,7 +293,11 @@ class VimeoTranscriptExtractor {
             }
         }
         
-        if (currentCue && currentCue.text) cues.push(currentCue);
+        // Don't forget the last cue
+        if (currentCue && currentCue.text) {
+            cues.push(currentCue);
+        }
+        
         return cues;
     }
 
@@ -285,14 +326,23 @@ class VimeoTranscriptExtractor {
                 break;
             }
             console.log(`Method ${i + 1} failed`);
+            
+            // Add delay between methods
+            if (i < methods.length - 1) {
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
         }
         
         if (!result || !result.success) {
             throw new Error(`No transcript found for video ${videoId} after trying all methods`);
         }
 
-        const vttContent = result.vttContent || '';
-        const cues = this.parseVTT(vttContent);
+        // Ensure we have VTT content before parsing
+        if (!result.vttContent) {
+            throw new Error(`Transcript URL found but no content retrieved for video ${videoId}`);
+        }
+
+        const cues = this.parseVTT(result.vttContent);
         const fullTranscript = cues.map(cue => cue.text).join(' ');
 
         return {
