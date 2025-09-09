@@ -173,7 +173,6 @@ class VimeoTranscriptExtractor {
             throw new Error(`Invalid Vimeo URL format: ${vimeoUrl}`);
         }
 
-        console.log(`Extracting transcript for video ID: ${videoId}`);
         const methods = [
             () => this.tryPlayerConfig(videoId),
             () => this.tryPatternMethod(videoId)
@@ -196,8 +195,6 @@ class VimeoTranscriptExtractor {
         if (!transcriptUrl) {
             throw new Error(`No transcript found for video ${videoId}. Video may not have captions available.`);
         }
-
-       console.log(`Found transcript using method: ${method}`);
 
         const response = await gotScraping({
             url: transcriptUrl,
