@@ -4,30 +4,17 @@
     "schemaVersion": 1,
     "properties": {
         "video_url": {
-            "title": "Single Vimeo Video URL",
+            "title": "Vimeo Video URL",
             "type": "string",
-            "description": "Single Vimeo video URL to extract transcript from",
+            "description": "Vimeo video URL to extract transcript from",
             "example": "https://vimeo.com/1109387993",
-            "pattern": "^https://vimeo\\.com/\\d+",
             "editor": "textfield"
-        },
-        "video_urls": {
-            "title": "Multiple Vimeo Video URLs (Optional)",
-            "type": "array",
-            "description": "Array of Vimeo video URLs to extract transcripts from (leave empty if using single URL)",
-            "items": {
-                "type": "string",
-                "pattern": "^https://vimeo\\.com/\\d+"
-            },
-            "example": ["https://vimeo.com/1109387993", "https://vimeo.com/987654321"],
-            "editor": "stringlist"
         },
         "language": {
             "title": "Language (Optional)",
             "type": "string",
             "description": "Preferred transcript language",
             "example": "en",
-            "default": "",
             "editor": "textfield"
         }
     },
