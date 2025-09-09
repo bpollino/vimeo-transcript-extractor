@@ -1,0 +1,35 @@
+{
+    "title": "Vimeo Transcript Extractor",
+    "type": "object",
+    "schemaVersion": 1,
+    "properties": {
+        "video_url": {
+            "title": "Single Vimeo Video URL",
+            "type": "string",
+            "description": "Single Vimeo video URL to extract transcript from",
+            "example": "https://vimeo.com/1109387993",
+            "pattern": "^https://vimeo\\.com/\\d+"
+        },
+        "video_urls": {
+            "title": "Multiple Vimeo Video URLs",
+            "type": "array",
+            "description": "Array of Vimeo video URLs to extract transcripts from",
+            "items": {
+                "type": "string",
+                "pattern": "^https://vimeo\\.com/\\d+"
+            },
+            "example": ["https://vimeo.com/1109387993", "https://vimeo.com/987654321"]
+        },
+        "language": {
+            "title": "Language",
+            "type": "string",
+            "description": "Preferred transcript language (optional)",
+            "example": "en",
+            "default": ""
+        }
+    },
+    "anyOf": [
+        { "required": ["video_url"] },
+        { "required": ["video_urls"] }
+    ]
+}
