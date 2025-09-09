@@ -287,12 +287,7 @@ try {
 }
 
 await Actor.exit();
-EOF
 
-# ===========================================
-# FILE 3: INPUT_SCHEMA.json
-# ===========================================
-cat > INPUT_SCHEMA.json << 'EOF'
 {
     "title": "Vimeo Transcript Extractor",
     "type": "object",
