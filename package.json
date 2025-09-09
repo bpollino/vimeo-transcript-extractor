@@ -1,0 +1,17 @@
+{
+    "name": "vimeo-transcript-extractor",
+    "version": "1.0.0",
+    "description": "Extract clean, timestamped transcripts from Vimeo videos",
+    "main": "main.js",
+    "type": "module",
+    "scripts": {
+        "start": "node main.js"
+    },
+    "dependencies": {
+        "apify": "^3.1.0",
+        "got-scraping": "^4.0.0"
+    },
+    "keywords": ["vimeo", "transcript", "captions", "subtitles", "video"],
+    "author": "Your Name",
+    "license": "MIT"
+}
