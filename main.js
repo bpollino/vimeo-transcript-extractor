@@ -200,7 +200,6 @@ class VimeoTranscriptExtractor {
 
         await Actor.log.info(`Found transcript using method: ${method}`);
 
-        // Fetch transcript content
         const response = await gotScraping({
             url: transcriptUrl,
             headers: {
@@ -230,7 +229,6 @@ class VimeoTranscriptExtractor {
     }
 }
 
-// Main Actor execution
 try {
     const input = await Actor.getInput();
     
@@ -240,7 +238,6 @@ try {
 
     const { video_url, video_urls, language } = input;
     
-    // Handle single URL or multiple URLs
     const urlsToProcess = video_urls || (video_url ? [video_url] : []);
     
     if (urlsToProcess.length === 0) {
@@ -248,21 +245,16 @@ try {
     }
 
     const extractor = new VimeoTranscriptExtractor();
-    const results = [];
 
     for (const url of urlsToProcess) {
         try {
             await Actor.log.info(`Processing: ${url}`);
             
-            // Validate Vimeo URL
             if (!url.includes('vimeo.com')) {
                 throw new Error(`Not a Vimeo URL: ${url}`);
             }
             
             const result = await extractor.extractTranscript(url);
-            results.push(result);
-            
-            // Push to dataset
             await Actor.pushData(result);
             
         } catch (error) {
@@ -273,13 +265,10 @@ try {
                 extracted_at: new Date().toISOString()
             };
             
-            results.push(errorResult);
             await Actor.pushData(errorResult);
             await Actor.log.error(`Failed to process ${url}: ${error.message}`);
         }
     }
-
-    await Actor.log.info(`Completed processing ${results.length} URLs`);
 
 } catch (error) {
     await Actor.log.error(`Actor failed: ${error.message}`);
@@ -287,39 +276,3 @@ try {
 }
 
 await Actor.exit();
-
-{
-    "title": "Vimeo Transcript Extractor",
-    "type": "object",
-    "schemaVersion": 1,
-    "properties": {
-        "video_url": {
-            "title": "Single Vimeo Video URL",
-            "type": "string",
-            "description": "Single Vimeo video URL to extract transcript from",
-            "example": "https://vimeo.com/1109387993",
-            "pattern": "^https://vimeo\\.com/\\d+"
-        },
-        "video_urls": {
-            "title": "Multiple Vimeo Video URLs",
-            "type": "array",
-            "description": "Array of Vimeo video URLs to extract transcripts from",
-            "items": {
-                "type": "string",
-                "pattern": "^https://vimeo\\.com/\\d+"
-            },
-            "example": ["https://vimeo.com/1109387993", "https://vimeo.com/987654321"]
-        },
-        "language": {
-            "title": "Language",
-            "type": "string",
-            "description": "Preferred transcript language (optional)",
-            "example": "en",
-            "default": ""
-        }
-    },
-    "anyOf": [
-        { "required": ["video_url"] },
-        { "required": ["video_urls"] }
-    ]
-}
